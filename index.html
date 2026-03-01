@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gas Fee Estimator | InstantQR</title>
+  <meta name="description" content="Estimate EVM gas fees (slow/standard/fast) using live JSON-RPC data. Runs locally in your browser." />
+  <meta name="robots" content="index,follow" />
+
+  <style>
+    :root{
+      --bg:#0b0f14;
+      --card:#111826;
+      --card2:#0f1623;
+      --text:#e8eef7;
+      --muted:#a6b1c2;
+      --line:#223047;
+      --accent:#4cc3ff;
+      --good:#34d399;
+      --warn:#fbbf24;
+      --bad:#fb7185;
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);}
+    a{color:inherit}
+    .wrap{max-width:980px;margin:0 auto;padding:22px 16px 40px;}
+    header{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+    .brand{display:flex;gap:10px;align-items:center}
+    .logo{
+      width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#7c5cff);
+      display:grid;place-items:center;font-weight:800;color:#081018;
+    }
+    h1{font-size:20px;margin:0}
+    .sub{color:var(--muted);font-size:13px;margin-top:4px}
+    .grid{display:grid;gap:12px}
+    .panel{
+      background:linear-gradient(180deg,var(--card),var(--card2));
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:14px;
+    }
+    .row{display:grid;grid-template-columns: 1fr 1fr; gap:12px}
+    @media (max-width:820px){ .row{grid-template-columns:1fr} }
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    select,input,button{
+      width:100%;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:#0b1220;
+      color:var(--text);
+      outline:none;
+    }
+    input::placeholder{color:#64748b}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .actions button{width:auto;cursor:pointer}
+    .btn{
+      background:linear-gradient(135deg,var(--accent),#7c5cff);
+      border:none;color:#081018;font-weight:800;
+    }
+    .btn2{
+      background:#0b1220;border:1px solid var(--line);color:var(--text);
+    }
+    .pill{
+      display:inline-flex;gap:8px;align-items:center;
+      padding:6px 10px;border:1px solid var(--line);border-radius:999px;
+      color:var(--muted);font-size:12px;background:#0b1220;
+    }
+    .statusDot{width:8px;height:8px;border-radius:50%;background:var(--warn)}
+    .cards{display:grid;grid-template-columns: repeat(3,1fr); gap:12px}
+    @media (max-width:820px){ .cards{grid-template-columns:1fr} }
+    .card{
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:12px;
+      background:#0b1220;
+    }
+    .tier{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .tier b{font-size:14px}
+    .badge{font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+    .kv{display:grid;grid-template-columns: 1fr auto; gap:8px; margin:6px 0; font-size:13px}
+    .kv span{color:var(--muted)}
+    .big{font-size:18px;font-weight:900;margin-top:6px}
+    .foot{color:var(--muted);font-size:12px;line-height:1.45;margin-top:10px}
+    .mono{font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">⛽</div>
+      <div>
+        <h1>Gas Fee Estimator</h1>
+        <div class="sub">Live EIP-1559 estimates (Slow / Standard / Fast). Runs locally in your browser.</div>
+      </div>
+    </div>
+    <div class="pill" id="statusPill">
+      <span class="statusDot" id="statusDot"></span>
+      <span id="statusText">Idle</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label for="network">Network</label>
+          <select id="network"></select>
+        </div>
+        <div>
+          <label for="gasUnits">Gas units (used to estimate total cost)</label>
+          <input id="gasUnits" type="number" min="1" step="1" value="21000" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px;">
+        <div>
+          <label for="rpcUrl">RPC URL (editable)</label>
+          <input id="rpcUrl" type="url" placeholder="https://…" />
+          <div class="foot">Tip: public RPCs are rate-limited. If you get errors, paste an Alchemy/Infura/QuickNode endpoint.</div>
+        </div>
+        <div>
+          <label>Actions</label>
+          <div class="actions">
+            <button class="btn" id="refreshBtn">Refresh</button>
+            <button class="btn2" id="testBtn">Test RPC</button>
+
+            <label class="pill" style="cursor:pointer;">
+              <input id="autoRefresh" type="checkbox" style="width:auto;margin:0 6px 0 0;">
+              Auto refresh (15s)
+            </label>
+          </div>
+          <div class="foot" id="lastUpdated">Last updated: —</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="cards">
+        <div class="card" id="slowCard">
+          <div class="tier">
+            <b>Slow</b>
+            <span class="badge">Budget</span>
+          </div>
+          <div class="kv"><span>Max fee</span><b class="mono" id="slowMax">—</b></div>
+          <div class="kv"><span>Priority fee</span><b class="mono" id="slowTip">—</b></div>
+          <div class="kv"><span>Estimated total</span><b class="mono" id="slowTotal">—</b></div>
+          <div class="big mono" id="slowNative">—</div>
+          <div class="foot">Uses lower percentile tip from recent blocks.</div>
+        </div>
+
+        <div class="card" id="stdCard">
+          <div class="tier">
+            <b>Standard</b>
+            <span class="badge">Recommended</span>
+          </div>
+          <div class="kv"><span>Max fee</span><b class="mono" id="stdMax">—</b></div>
+          <div class="kv"><span>Priority fee</span><b class="mono" id="stdTip">—</b></div>
+          <div class="kv"><span>Estimated total</span><b class="mono" id="stdTotal">—</b></div>
+          <div class="big mono" id="stdNative">—</div>
+          <div class="foot">Uses median tip from recent blocks.</div>
+        </div>
+
+        <div class="card" id="fastCard">
+          <div class="tier">
+            <b>Fast</b>
+            <span class="badge">High priority</span>
+          </div>
+          <div class="kv"><span>Max fee</span><b class="mono" id="fastMax">—</b></div>
+          <div class="kv"><span>Priority fee</span><b class="mono" id="fastTip">—</b></div>
+          <div class="kv"><span>Estimated total</span><b class="mono" id="fastTotal">—</b></div>
+          <div class="big mono" id="fastNative">—</div>
+          <div class="foot">Uses higher percentile tip from recent blocks.</div>
+        </div>
+      </div>
+
+      <div class="foot" style="margin-top:12px;">
+        <b>How it works:</b> we query <span class="mono">eth_feeHistory</span> to estimate priority fees and read the latest base fee. If a chain/RPC doesn’t support fee history, we fall back to <span class="mono">eth_gasPrice</span>.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // Defaults backed by docs/sources:
+  // Ethereum (Cloudflare Gateway) :contentReference[oaicite:6]{index=6}
+  // Arbitrum One RPC :contentReference[oaicite:7]{index=7}
+  // Optimism public RPC :contentReference[oaicite:8]{index=8}
+  // Base public RPC :contentReference[oaicite:9]{index=9}
+  // Polygon via Ankr public RPC :contentReference[oaicite:10]{index=10}
+  const NETWORKS = [
+    { key:"eth",  name:"Ethereum",     chainId:1,     symbol:"ETH", rpc:"https://cloudflare-eth.com" },
+    { key:"arb",  name:"Arbitrum One", chainId:42161, symbol:"ETH", rpc:"https://arb1.arbitrum.io/rpc" },
+    { key:"op",   name:"Optimism",     chainId:10,    symbol:"ETH", rpc:"https://mainnet.optimism.io" },
+    { key:"base", name:"Base",         chainId:8453,  symbol:"ETH", rpc:"https://mainnet.base.org" },
+    { key:"poly", name:"Polygon PoS",  chainId:137,   symbol:"POL", rpc:"https://rpc.ankr.com/polygon" },
+  ];
+
+  const els = {
+    network: document.getElementById("network"),
+    gasUnits: document.getElementById("gasUnits"),
+    rpcUrl: document.getElementById("rpcUrl"),
+    refreshBtn: document.getElementById("refreshBtn"),
+    testBtn: document.getElementById("testBtn"),
+    autoRefresh: document.getElementById("autoRefresh"),
+    statusDot: document.getElementById("statusDot"),
+    statusText: document.getElementById("statusText"),
+    lastUpdated: document.getElementById("lastUpdated"),
+
+    slowMax: document.getElementById("slowMax"),
+    slowTip: document.getElementById("slowTip"),
+    slowTotal: document.getElementById("slowTotal"),
+    slowNative: document.getElementById("slowNative"),
+
+    stdMax: document.getElementById("stdMax"),
+    stdTip: document.getElementById("stdTip"),
+    stdTotal: document.getElementById("stdTotal"),
+    stdNative: document.getElementById("stdNative"),
+
+    fastMax: document.getElementById("fastMax"),
+    fastTip: document.getElementById("fastTip"),
+    fastTotal: document.getElementById("fastTotal"),
+    fastNative: document.getElementById("fastNative"),
+  };
+
+  let timer = null;
+  let rpcId = 1;
+
+  function setStatus(kind, text){
+    const colors = { ok:"#34d399", warn:"#fbbf24", bad:"#fb7185", idle:"#fbbf24" };
+    els.statusDot.style.background = colors[kind] || colors.idle;
+    els.statusText.textContent = text;
+  }
+
+  function gweiFromWei(weiBigInt){
+    // wei -> gwei (string with 2 decimals)
+    const gwei = Number(weiBigInt) / 1e9;
+    if (!Number.isFinite(gwei)) return "—";
+    return gwei.toFixed(2) + " gwei";
+  }
+
+  function formatNative(weiBigInt, symbol){
+    // wei -> native (string)
+    const val = Number(weiBigInt) / 1e18;
+    if (!Number.isFinite(val)) return "—";
+    // trim to sensible digits
+    const out = val >= 1 ? val.toFixed(5) : val.toPrecision(5);
+    return `${out} ${symbol}`;
+  }
+
+  async function rpcCall(url, method, params){
+    const body = {
+      jsonrpc: "2.0",
+      id: rpcId++,
+      method,
+      params
+    };
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type":"application/json" },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || "RPC error");
+    return data.result;
+  }
+
+  function median(arr){
+    const a = [...arr].sort((x,y)=> (x<y?-1:x>y?1:0));
+    const mid = Math.floor(a.length/2);
+    return a.length % 2 ? a[mid] : (a[mid-1] + a[mid]) / 2n;
+  }
+
+  function avgBigInt(arr){
+    if (!arr.length) return 0n;
+    let s = 0n;
+    for (const x of arr) s += x;
+    return s / BigInt(arr.length);
+  }
+
+  async function estimateFees(rpcUrl){
+    // Try EIP-1559 fee history first
+    // eth_feeHistory: blockCount, newestBlock, rewardPercentiles
+    const blockCount = "0x14"; // 20 blocks
+    const newest = "latest";
+    const percentiles = [10, 50, 90];
+
+    try{
+      const fh = await rpcCall(rpcUrl, "eth_feeHistory", [blockCount, newest, percentiles]);
+
+      // baseFeePerGas includes one extra "next block" base fee at end
+      const baseFees = fh.baseFeePerGas.map(x => BigInt(x));
+      const nextBaseFee = baseFees[baseFees.length - 1]; // good practical estimate
+
+      // fh.reward is [ [p10,p50,p90], ... ] per block (priority fee suggestions)
+      const rewards = fh.reward.map(row => row.map(x => BigInt(x))); // wei
+      const p10 = rewards.map(r => r[0]);
+      const p50 = rewards.map(r => r[1]);
+      const p90 = rewards.map(r => r[2]);
+
+      // Use median to reduce spikes (or avg)
+      const tipSlow = median(p10);
+      const tipStd  = median(p50);
+      const tipFast = median(p90);
+
+      // maxFee suggestion: (2x base fee) + priority
+      const maxSlow = nextBaseFee * 2n + tipSlow;
+      const maxStd  = nextBaseFee * 2n + tipStd;
+      const maxFast = nextBaseFee * 2n + tipFast;
+
+      return {
+        mode: "eip1559",
+        baseFee: nextBaseFee,
+        tiers: {
+          slow: { maxFee: maxSlow, tip: tipSlow },
+          std:  { maxFee: maxStd,  tip: tipStd  },
+          fast: { maxFee: maxFast, tip: tipFast },
+        }
+      };
+    } catch(e){
+      // Fallback to legacy gas price
+      const gp = await rpcCall(rpcUrl, "eth_gasPrice", []);
+      const gasPrice = BigInt(gp);
+      // Make simple tier multipliers
+      const slow = gasPrice;
+      const std  = (gasPrice * 12n) / 10n; // +20%
+      const fast = (gasPrice * 15n) / 10n; // +50%
+      return {
+        mode: "legacy",
+        baseFee: null,
+        tiers: {
+          slow: { maxFee: slow, tip: 0n },
+          std:  { maxFee: std,  tip: 0n },
+          fast: { maxFee: fast, tip: 0n },
+        }
+      };
+    }
+  }
+
+  function updateUI(fees){
+    const gasUnits = Math.max(1, parseInt(els.gasUnits.value || "21000", 10));
+    const gas = BigInt(gasUnits);
+    const net = NETWORKS.find(n => n.key === els.network.value) || NETWORKS[0];
+    const sym = net.symbol;
+
+    function setTier(prefix, tier){
+      const totalWei = gas * tier.maxFee; // rough estimate; actual EIP-1559 could be lower than max
+      document.getElementById(prefix+"Max").textContent = gweiFromWei(tier.maxFee);
+      document.getElementById(prefix+"Tip").textContent = tier.tip ? gweiFromWei(tier.tip) : "—";
+      document.getElementById(prefix+"Total").textContent = gweiFromWei(totalWei / gas); // per-gas view
+      document.getElementById(prefix+"Native").textContent = formatNative(totalWei, sym);
+    }
+
+    setTier("slow", fees.tiers.slow);
+    setTier("std",  fees.tiers.std);
+    setTier("fast", fees.tiers.fast);
+
+    const now = new Date();
+    els.lastUpdated.textContent = `Last updated: ${now.toLocaleString()}`;
+  }
+
+  async function testRpc(){
+    setStatus("warn","Testing RPC…");
+    try{
+      const url = els.rpcUrl.value.trim();
+      const chainIdHex = await rpcCall(url, "eth_chainId", []);
+      const chainId = parseInt(chainIdHex, 16);
+      setStatus("ok", `RPC OK (chainId ${chainId})`);
+    }catch(e){
+      setStatus("bad", `RPC error: ${e.message}`);
+    }
+  }
+
+  async function refresh(){
+    setStatus("warn","Fetching gas data…");
+    try{
+      const url = els.rpcUrl.value.trim();
+      const fees = await estimateFees(url);
+      updateUI(fees);
+
+      const net = NETWORKS.find(n => n.key === els.network.value) || NETWORKS[0];
+      setStatus("ok", `${net.name}: updated`);
+    }catch(e){
+      setStatus("bad", `Failed: ${e.message}`);
+    }
+  }
+
+  function populateNetworks(){
+    els.network.innerHTML = NETWORKS.map(n => `<option value="${n.key}">${n.name}</option>`).join("");
+    els.network.value = "eth";
+    els.rpcUrl.value = NETWORKS.find(n => n.key === els.network.value).rpc;
+  }
+
+  function setAutoRefresh(on){
+    if (timer) { clearInterval(timer); timer = null; }
+    if (on){
+      timer = setInterval(refresh, 15000);
+    }
+  }
+
+  // Event wiring
+  els.network.addEventListener("change", () => {
+    const net = NETWORKS.find(n => n.key === els.network.value);
+    els.rpcUrl.value = net ? net.rpc : "";
+    refresh();
+  });
+
+  els.gasUnits.addEventListener("input", () => refresh());
+  els.refreshBtn.addEventListener("click", refresh);
+  els.testBtn.addEventListener("click", testRpc);
+  els.autoRefresh.addEventListener("change", (e) => setAutoRefresh(e.target.checked));
+
+  // Init
+  populateNetworks();
+  setStatus("idle","Ready");
+  refresh();
+})();
+</script>
+</body>
+</html>
